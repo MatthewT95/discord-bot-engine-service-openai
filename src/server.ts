@@ -94,9 +94,32 @@ app.use((req, res) => {
 });
 
 // Start server
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   console.log(`Health check: http://localhost:${port}/health`);
   console.log(`Models endpoint: http://localhost:${port}/models`);
   console.log(`Responses endpoint: http://localhost:${port}/responses`);
 });
+
+let isShuttingDown = false;
+const shutdown = (signal?: string) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  if (signal) {
+    console.log(`\nShutting down server (${signal})...`);
+  } else {
+    console.log('\nShutting down server...');
+  }
+  server.close(() => {
+    process.exit(0);
+  });
+
+  // Force exit if graceful shutdown hangs
+  setTimeout(() => {
+    process.exit(1);
+  }, 5000);
+};
+
+process.once('SIGINT', () => shutdown('SIGINT'));
+process.once('SIGTERM', () => shutdown('SIGTERM'));
+process.once('SIGHUP', () => shutdown('SIGHUP'));
