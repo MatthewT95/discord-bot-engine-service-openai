@@ -10,6 +10,50 @@ async function testAPI() {
     env: { ...process.env, PORT: '4001' } // Use port 4001 for testing
   });
 
+  let shuttingDown = false;
+  const shutdownServer = (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    if (signal) {
+      console.log(`\n🛑 Stopping server (${signal})...`);
+    } else {
+      console.log('\n🛑 Stopping server...');
+    }
+    serverProcess.kill('SIGTERM');
+    setTimeout(() => {
+      if (!serverProcess.killed) {
+        serverProcess.kill('SIGKILL');
+      }
+    }, 2000);
+  };
+
+  const exitHandler = (signal) => {
+    shutdownServer(signal);
+    setTimeout(() => {
+      process.exit(0);
+    }, 500);
+  };
+
+  process.once('SIGINT', exitHandler);
+  process.once('SIGTERM', exitHandler);
+  process.once('SIGHUP', exitHandler);
+  process.once('exit', () => shutdownServer());
+  process.once('uncaughtException', (err) => {
+    console.error('❌ Uncaught exception:', err);
+    exitHandler('uncaughtException');
+  });
+  process.once('unhandledRejection', (err) => {
+    console.error('❌ Unhandled rejection:', err);
+    exitHandler('unhandledRejection');
+  });
+
+  serverProcess.on('close', (code, signal) => {
+    if (!shuttingDown) {
+      console.log(`\n🛑 Server exited (code: ${code}, signal: ${signal || 'none'})`);
+      process.exit(code ?? 0);
+    }
+  });
+
   let serverReady = false;
 
   // Wait for server to start
@@ -96,8 +140,7 @@ async function testAPI() {
     console.error('❌ Test failed:', error.message);
   } finally {
     // Clean up: stop the server
-    console.log('\n🛑 Stopping server...');
-    serverProcess.kill('SIGTERM');
+    shutdownServer();
 
     // Give it a moment to shut down gracefully
     setTimeout(() => {
